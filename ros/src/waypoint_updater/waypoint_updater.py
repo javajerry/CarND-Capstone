@@ -3,6 +3,7 @@
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
+from tf.transformations import euler_from_quaternion
 
 import math
 
@@ -25,54 +26,92 @@ LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this n
 
 
 class WaypointUpdater(object):
-    def __init__(self):
-        rospy.init_node('waypoint_updater')
+	def __init__(self):
+		rospy.init_node('waypoint_updater')
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+		rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+		rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
-        # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
+		# TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
 
 
-        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+		self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
-        # TODO: Add other member variables you need below
+		# TODO: Add other member variables you need below
 
-        rospy.spin()
+		rospy.spin()
 
-    def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+	def pose_cb(self, msg):
+		# TODO: Implement
+		rospy.loginfo (" pose x:%s , y:%s", msg.pose.position.x, msg.pose.position.y)
+		closest_wp = len(self.waypoints) + 1
+		closest_dist = 999999
+		for i in range(len(self.waypoints)):
+			target_x = self.waypoints[i].pose.pose.position.x - msg.pose.position.x
+			target_y = self.waypoints[i].pose.pose.position.y - msg.pose.position.y
 
-    def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+			dist = math.sqrt((target_x * target_x) + (target_y * target_y))
 
-    def traffic_cb(self, msg):
-        # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+			if (dist < closest_dist):
+				closest_wp = i
+				closest_dist = dist
 
-    def obstacle_cb(self, msg):
-        # TODO: Callback for /obstacle_waypoint message. We will implement it later
-        pass
+		waypoint_x = self.waypoints[closest_wp].pose.pose.position.x
+		waypoint_y = self.waypoints[closest_wp].pose.pose.position.y
 
-    def get_waypoint_velocity(self, waypoint):
-        return waypoint.twist.twist.linear.x
+		x = msg.pose.position.x
+		y = msg.pose.position.y
+		heading = math.atan2(waypoint_y - y, waypoint_x - x)
 
-    def set_waypoint_velocity(self, waypoints, waypoint, velocity):
-        waypoints[waypoint].twist.twist.linear.x = velocity
 
-    def distance(self, waypoints, wp1, wp2):
-        dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
+		(roll, pitch, yaw) = euler_from_quaternion(
+									[msg.pose.orientation.x,
+									msg.pose.orientation.y,
+									msg.pose.orientation.z,
+									msg.pose.orientation.w])
+		angle = abs(yaw-heading)
+
+		if (angle > math.pi / 4):
+			closest_wp += 1
+
+		final_waypoints = Lane()
+
+		for i in range(closest_wp, closest_wp+LOOKAHEAD_WPS):
+			final_waypoints.waypoints.append(self.waypoints[i])
+
+		self.final_waypoints_pub.publish(final_waypoints)
+
+	def waypoints_cb(self, msg):
+		# TODO: Implement
+		self.waypoints = msg.waypoints
+		rospy.loginfo("waypoints size %s", len(self.waypoints))
+
+
+	def traffic_cb(self, msg):
+		# TODO: Callback for /traffic_waypoint message. Implement
+		pass
+
+	def obstacle_cb(self, msg):
+		# TODO: Callback for /obstacle_waypoint message. We will implement it later
+		pass
+
+	def get_waypoint_velocity(self, waypoint):
+		return waypoint.twist.twist.linear.x
+
+	def set_waypoint_velocity(self, waypoints, waypoint, velocity):
+		waypoints[waypoint].twist.twist.linear.x = velocity
+
+	def distance(self, waypoints, wp1, wp2):
+		dist = 0
+		dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+		for i in range(wp1, wp2+1):
+			dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
+			wp1 = i
+		return dist
 
 
 if __name__ == '__main__':
-    try:
-        WaypointUpdater()
-    except rospy.ROSInterruptException:
-        rospy.logerr('Could not start waypoint updater node.')
+	try:
+		WaypointUpdater()
+	except rospy.ROSInterruptException:
+		rospy.logerr('Could not start waypoint updater node.')
