@@ -22,8 +22,8 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-
+#LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 100
 
 class WaypointUpdater(object):
 	def __init__(self):
@@ -39,16 +39,22 @@ class WaypointUpdater(object):
 
 		# TODO: Add other member variables you need below
 
+		rate = rospy.Rate(1)
+
 		rospy.spin()
 
 	def pose_cb(self, msg):
 		# TODO: Implement
-		rospy.loginfo (" pose x:%s , y:%s", msg.pose.position.x, msg.pose.position.y)
+		x = msg.pose.position.x
+		y = msg.pose.position.y
+
+		#rospy.loginfo (" pose x:%s , y:%s", x, y)
 		closest_wp = len(self.waypoints) + 1
 		closest_dist = 999999
+
 		for i in range(len(self.waypoints)):
-			target_x = self.waypoints[i].pose.pose.position.x - msg.pose.position.x
-			target_y = self.waypoints[i].pose.pose.position.y - msg.pose.position.y
+			target_x = self.waypoints[i].pose.pose.position.x - x
+			target_y = self.waypoints[i].pose.pose.position.y - y
 
 			dist = math.sqrt((target_x * target_x) + (target_y * target_y))
 
@@ -59,8 +65,7 @@ class WaypointUpdater(object):
 		waypoint_x = self.waypoints[closest_wp].pose.pose.position.x
 		waypoint_y = self.waypoints[closest_wp].pose.pose.position.y
 
-		x = msg.pose.position.x
-		y = msg.pose.position.y
+		
 		heading = math.atan2(waypoint_y - y, waypoint_x - x)
 
 
@@ -77,14 +82,20 @@ class WaypointUpdater(object):
 		final_waypoints = Lane()
 
 		for i in range(closest_wp, closest_wp+LOOKAHEAD_WPS):
+			self.set_waypoint_velocity(self.waypoints, i , 10./2.23693)
 			final_waypoints.waypoints.append(self.waypoints[i])
 
 		self.final_waypoints_pub.publish(final_waypoints)
 
-	def waypoints_cb(self, msg):
+
+	def waypoints_cb(self, lane):
 		# TODO: Implement
-		self.waypoints = msg.waypoints
+		self.waypoints = lane.waypoints
 		rospy.loginfo("waypoints size %s", len(self.waypoints))
+
+		#rospy.logwarn("limiting waypoint velocity to 10 mph ")
+		#for i in range(len(self.waypoints)):
+		#	self.set_waypoint_velocity(self.waypoints, i, 10./2.23693)
 
 
 	def traffic_cb(self, msg):
